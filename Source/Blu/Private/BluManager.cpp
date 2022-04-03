@@ -34,7 +34,7 @@ void BluManager::OnBeforeCommandLineProcessing(const CefString& process_type,
 		// Enables things like CSS3 and WebGL
 		CommandLine->AppendSwitch("enable-gpu-rasterization");
 		CommandLine->AppendSwitch("enable-webgl");
-		CommandLine->AppendSwitch("disable-web-security");
+		//CommandLine->AppendSwitch("disable-web-security");
 	}
 
 	CommandLine->AppendSwitchWithValue("enable-blink-features", "HTMLImports");
