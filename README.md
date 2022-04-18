@@ -1,6 +1,6 @@
-[![release](https://img.shields.io/github/release/getnamo/BLUI.svg?style=flat-square)](https://github.com/getnamo/BLUI/releases)
+[![release](https://img.shields.io/github/release/getnamo/BLUI.svg?style=flat-square)](https://github.com/getnamo/BLUI-Unreal/releases)
 ![BLUI-logo](https://cloud.githubusercontent.com/assets/1334174/5969395/201a1202-a7f1-11e4-98a4-12bc6793f830.png)
-[![Github All Releases](https://img.shields.io/github/downloads/getnamo/BLUI/total.svg)](https://github.com/getnamo/BLUI/releases)
+[![Github All Releases](https://img.shields.io/github/downloads/getnamo/BLUI-Unreal/total.svg)](https://github.com/getnamo/BLUI-Unreal/releases)
 
 ## Getnamo Fork Notes
 
@@ -8,7 +8,7 @@ A fork of BLUI that is kept relatively up to date.
 
 Latest release is updated to [CEF 80.0.3987.132](https://github.com/chromiumembedded/cef/tree/3987).
 
-To install check out the latest releases https://github.com/getnamo/BLUI/releases and drag and drop *Plugins* folder into your project root folder
+To install check out the latest releases https://github.com/getnamo/BLUI-Unreal/releases and drag and drop *Plugins* folder into your project root folder
 
 Unreal thread: https://forums.unrealengine.com/community/released-projects/29036-blui-open-source-html5-js-css-hud-ui
 
@@ -69,7 +69,7 @@ Instead of ticking in your level bp, I prefer to use a simple actor to do the ti
 
 ## Demo Project
 
-Thanks to @oivio we have the Demo project updated to the latest release. See https://github.com/getnamo/BLUI/releases/tag/3.4.0 for the 4.22 Demo project release ([BLUI-v3.4.0-UE4.22-DemoExamples.7z](https://github.com/getnamo/BLUI/releases/download/3.4.0/BLUI-v3.4.0-UE4.22-DemoExamples.7z))
+Thanks to @oivio we have the Demo project updated to the latest release. See https://github.com/getnamo/BLUI-Unreal/releases/tag/3.4.0 for the 4.22 Demo project release ([BLUI-v3.4.0-UE4.22-DemoExamples.7z](https://github.com/getnamo/BLUI-Unreal/releases/download/3.4.0/BLUI-v3.4.0-UE4.22-DemoExamples.7z))
 
 ### Video of Demo project
 

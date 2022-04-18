@@ -5,13 +5,13 @@
 
 struct FTickEventLoopData
 {
-	FDelegateHandle DelegateHandle;
+	FTSTicker::FDelegateHandle DelegateHandle;
 	int32 EyeCount;
 	bool bShouldTickEventLoop;
 
 	FTickEventLoopData()
 	{
-		DelegateHandle = FDelegateHandle();
+		DelegateHandle = FTSTicker::FDelegateHandle();
 		EyeCount = 0;
 		bShouldTickEventLoop = true;
 	}

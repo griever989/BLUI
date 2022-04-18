@@ -117,7 +117,7 @@ void UBluEye::ResetTexture()
 	Texture->AddToRoot();
 	Texture->UpdateResource();
 
-	RenderParams.Texture2DResource = (FTexture2DResource*)Texture->Resource;
+	RenderParams.Texture2DResource = (FTexture2DResource*)Texture->GetResource();
 
 	ResetMatInstance();
 
@@ -131,13 +131,13 @@ void UBluEye::DestroyTexture()
 	{
 		Texture->RemoveFromRoot();
 
-		if (Texture->Resource)
+		if (Texture->GetResource())
 		{
-			BeginReleaseResource(Texture->Resource);
+			BeginReleaseResource(Texture->GetResource());
 			FlushRenderingCommands();
 		}
 
-		Texture->MarkPendingKill();
+		Texture->MarkAsGarbage();
 		Texture = nullptr;
 		bValidTexture = false;
 	}
@@ -161,7 +161,7 @@ void UBluEye::TextureUpdate(const void *buffer, FUpdateTextureRegion2D *updateRe
 		}
 	 
 		FUpdateTextureRegionsData* RegionData = new FUpdateTextureRegionsData;
-		RegionData->Texture2DResource = (FTextureResource*)Texture->Resource;
+		RegionData->Texture2DResource = (FTextureResource*)Texture->GetResource();
 		RegionData->NumRegions = regionCount;
 		RegionData->SrcBpp = 4;
 		RegionData->SrcPitch = int32(Settings.ViewSize.X) * 4;
@@ -627,7 +627,7 @@ void UBluEye::SpawnTickEventLoopIfNeeded()
 {
 	if (!EventLoopData.DelegateHandle.IsValid())
 	{
-		EventLoopData.DelegateHandle = FTicker::GetCoreTicker().AddTicker(FTickerDelegate::CreateLambda([&](float DeltaTime)
+		EventLoopData.DelegateHandle = FTSTicker::GetCoreTicker().AddTicker(FTickerDelegate::CreateLambda([&](float DeltaTime)
 		{
 			if (EventLoopData.bShouldTickEventLoop)
 			{
@@ -719,8 +719,8 @@ void UBluEye::BeginDestroy()
 	EventLoopData.EyeCount--;
 	if (EventLoopData.EyeCount <= 0)
 	{
-		FTicker::GetCoreTicker().RemoveTicker(EventLoopData.DelegateHandle);
-		EventLoopData.DelegateHandle = FDelegateHandle();
+		FTSTicker::GetCoreTicker().RemoveTicker(EventLoopData.DelegateHandle);
+		EventLoopData.DelegateHandle = FTSTicker::FDelegateHandle();
 	}
 	Super::BeginDestroy();
 }
