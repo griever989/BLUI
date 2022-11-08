@@ -49,7 +49,7 @@ void BrowserClient::OnBeforeClose(CefRefPtr<CefBrowser> Browser)
 	//CEF_REQUIRE_UI_THREAD();
 	if (BrowserId == Browser->GetIdentifier())
 	{
-		BrowserRef = NULL;
+		BrowserRef.reset();
 	}
 }
 
