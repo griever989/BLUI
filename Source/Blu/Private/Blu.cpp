@@ -12,9 +12,9 @@ class FBlu : public IBlu
 		FString ExecutablePath = FPaths::ConvertRelativePathToFull(IPluginManager::Get().FindPlugin("BLUI")->GetBaseDir() + "/ThirdParty/cef/");
 
 		// Setup the default settings for BluManager
-		BluManager::Settings.windowless_rendering_enabled = true;
+		//BluManager::Settings.windowless_rendering_enabled = true;
 		BluManager::Settings.no_sandbox = true;
-		BluManager::Settings.remote_debugging_port = 7777;
+		BluManager::Settings.remote_debugging_port = 17777;
 		BluManager::Settings.uncaught_exception_stack_size = 5;
 
 	#if PLATFORM_LINUX

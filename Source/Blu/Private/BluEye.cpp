@@ -2,8 +2,6 @@
 #include "BluEye.h"
 #include "RenderHandler.h"
 
-FTickEventLoopData UBluEye::EventLoopData = FTickEventLoopData();
-
 FBluEyeSettings::FBluEyeSettings()
 {
 	FrameRate = 60.f;
@@ -21,8 +19,75 @@ FBluEyeSettings::FBluEyeSettings()
 UBluEye::UBluEye(const class FObjectInitializer& PCIP)
 	: Super(PCIP)
 {
-	Texture = nullptr;
-	bValidTexture = false;
+}
+
+namespace {
+
+	// When using the Views framework this object provides the delegate
+	// implementation for the CefWindow that hosts the Views-based browser.
+	class SimpleWindowDelegate : public CefWindowDelegate {
+	public:
+		explicit SimpleWindowDelegate(CefRefPtr<CefBrowserView> browser_view)
+			: browser_view_(browser_view) {}
+
+		void OnWindowCreated(CefRefPtr<CefWindow> window) override {
+			// Add the browser view and show the window.
+			window->AddChildView(browser_view_);
+			window->Show();
+
+			// Give keyboard focus to the browser view.
+			browser_view_->RequestFocus();
+		}
+
+		void OnWindowDestroyed(CefRefPtr<CefWindow> window) override {
+			browser_view_ = nullptr;
+		}
+
+		bool CanClose(CefRefPtr<CefWindow> window) override {
+			// Allow the window to close if the browser says it's OK.
+			CefRefPtr<CefBrowser> browser = browser_view_->GetBrowser();
+			if (browser)
+				return browser->GetHost()->TryCloseBrowser();
+			return true;
+		}
+
+		CefSize GetPreferredSize(CefRefPtr<CefView> view) override {
+			return CefSize(800, 600);
+		}
+
+	private:
+		CefRefPtr<CefBrowserView> browser_view_;
+
+		IMPLEMENT_REFCOUNTING(SimpleWindowDelegate);
+		DISALLOW_COPY_AND_ASSIGN(SimpleWindowDelegate);
+	};
+
+	class SimpleBrowserViewDelegate : public CefBrowserViewDelegate,
+		public CefWindowDelegate {
+	public:
+		SimpleBrowserViewDelegate() {}
+
+		bool OnPopupBrowserViewCreated(CefRefPtr<CefBrowserView> browser_view,
+			CefRefPtr<CefBrowserView> popup_browser_view,
+			bool is_devtools) override {
+			// Create a new top-level Window for the popup. It will show itself after
+			// creation.
+			CefWindow::CreateTopLevelWindow(
+				new SimpleWindowDelegate(popup_browser_view));
+
+			// We created the Window.
+			return true;
+		}
+
+		bool IsFrameless(CefRefPtr<CefWindow> window) override {
+			return true;
+		}
+
+	private:
+		IMPLEMENT_REFCOUNTING(SimpleBrowserViewDelegate);
+		DISALLOW_COPY_AND_ASSIGN(SimpleBrowserViewDelegate);
+	};
+
 }
 
 void UBluEye::Init()
@@ -58,7 +123,7 @@ void UBluEye::Init()
 	//Info.height = (int32)Settings.ViewSize.Y;
 
 	// Set transparant option
-	Info.SetAsWindowless(0); //bIsTransparent
+	//Info.SetAsWindowless(0); //bIsTransparent
 
 	// Figure out if we want to turn on WebGL support
 	if (Settings.bEnableWebGL)
@@ -72,20 +137,18 @@ void UBluEye::Init()
 
 	//NB: this setting will change it globally for all new instances
 	BluManager::AutoPlay = Settings.bAutoPlayEnabled;
+	ClientHandler = new BrowserClient();
 
-	Renderer = new RenderHandler(Settings.ViewSize.X, Settings.ViewSize.Y, this);
-	ClientHandler = new BrowserClient(Renderer);
-	Browser = CefBrowserHost::CreateBrowserSync(
-		Info,
+	Browser = CefBrowserView::CreateBrowserView(
 		ClientHandler.get(),
 		"about:blank",
 		BrowserSettings,
 		nullptr,
-		nullptr);
+		nullptr,
+		new SimpleBrowserViewDelegate());
 
-
-	Browser->GetHost()->SetWindowlessFrameRate(Settings.FrameRate);
-	Browser->GetHost()->SetAudioMuted(Settings.bAudioMuted);
+	//Browser->GetHost()->SetWindowlessFrameRate(Settings.FrameRate);
+	//Browser->GetBrowser()->GetHost()->SetAudioMuted(Settings.bAudioMuted);
 
 	// Setup JS event emitter
 	ClientHandler->SetEventEmitter(&ScriptEventEmitter);
@@ -94,108 +157,15 @@ void UBluEye::Init()
 	UE_LOG(LogBlu, Log, TEXT("Component Initialized"));
 	UE_LOG(LogBlu, Log, TEXT("Loading URL: %s"), *DefaultURL);
 
-	// Load the default URL
 	LoadURL(DefaultURL);
-	ResetTexture();
 
-	//Instead of manually ticking, we now tick whenever one blu eye is created
-	SpawnTickEventLoopIfNeeded();
-}
-
-void UBluEye::ResetTexture()
-{
-
-	// Here we init the texture to its initial state
-	DestroyTexture();
-
-	bValidTexture = false;
-	Texture = nullptr;
-	
-
-	// init the new Texture2D
-	Texture = UTexture2D::CreateTransient(Settings.ViewSize.X, Settings.ViewSize.Y, PF_B8G8R8A8);
-	Texture->AddToRoot();
-	Texture->UpdateResource();
-
-	RenderParams.Texture2DResource = (FTexture2DResource*)Texture->GetResource();
-
-	ResetMatInstance();
-
-	bValidTexture = true;
-}
-
-void UBluEye::DestroyTexture()
-{
-	// Here we destroy the texture and its resource
-	if (Texture)
-	{
-		Texture->RemoveFromRoot();
-
-		if (Texture->GetResource())
-		{
-			BeginReleaseResource(Texture->GetResource());
-			FlushRenderingCommands();
-		}
-
-		Texture->MarkAsGarbage();
-		Texture = nullptr;
-		bValidTexture = false;
-	}
-}
-
-void UBluEye::TextureUpdate(const void *buffer, FUpdateTextureRegion2D *updateRegions, uint32  regionCount)
-{
-	if (!Browser || !bEnabled)
-	{
-		UE_LOG(LogBlu, Warning, TEXT("NO BROWSER ACCESS OR NOT ENABLED"))
-		return;
-	}
-
-	if (bValidTexture && Texture->IsValidLowLevelFast())
-	{
-
-		if (buffer == nullptr)
-		{
-			UE_LOG(LogBlu, Warning, TEXT("NO TEXTDATA"))
-				return;
-		}
-	 
-		FUpdateTextureRegionsData* RegionData = new FUpdateTextureRegionsData;
-		RegionData->Texture2DResource = (FTextureResource*)Texture->GetResource();
-		RegionData->NumRegions = regionCount;
-		RegionData->SrcBpp = 4;
-		RegionData->SrcPitch = int32(Settings.ViewSize.X) * 4;
-		RegionData->Regions = updateRegions;
-
-		//We need to copy this memory or it might get uninitialized
-		RegionData->SrcData.SetNumUninitialized(RegionData->SrcPitch * int32(Settings.ViewSize.Y));
-		FPlatformMemory::Memcpy(RegionData->SrcData.GetData(), buffer, RegionData->SrcData.Num());
-
-		ENQUEUE_RENDER_COMMAND(UpdateBLUICommand)(
-			[RegionData](FRHICommandList& CommandList)
-			{
-				for (uint32 RegionIndex = 0; RegionIndex < RegionData->NumRegions; RegionIndex++)
-				{
-					RHIUpdateTexture2D(RegionData->Texture2DResource->TextureRHI->GetTexture2D(), 0, RegionData->Regions[RegionIndex], RegionData->SrcPitch, RegionData->SrcData.GetData()
-						+ RegionData->Regions[RegionIndex].SrcY * RegionData->SrcPitch
-						+ RegionData->Regions[RegionIndex].SrcX * RegionData->SrcBpp);
-				}
-
-				FMemory::Free(RegionData->Regions);
-				delete RegionData;
-			});
-
-	}
-	else {
-		UE_LOG(LogBlu, Warning, TEXT("no Texture or Texture->resource"))
-	}
-
+	StartEventLoop();
 }
 
 void UBluEye::ExecuteJS(const FString& Code)
 {
 	CefString CodeStr = *Code;
-	Browser->GetMainFrame()->ExecuteJavaScript(CodeStr, "", 0);
+	Browser->GetBrowser()->GetMainFrame()->ExecuteJavaScript(CodeStr, "", 0);
 }
 
 void UBluEye::ExecuteJSMethodWithParams(const FString& methodName, const TArray<FString> params)
@@ -247,41 +217,41 @@ void UBluEye::LoadURL(const FString& newURL)
 		UE_LOG(LogBlu, Log, TEXT("Load Local File: %s"), *LocalFile)
 
 		// Load it up 
-		Browser->GetMainFrame()->LoadURL(*LocalFile);
+		Browser->GetBrowser()->GetMainFrame()->LoadURL(*LocalFile);
 
 		return;
 
 	}
 
 	// Load as usual
-	Browser->GetMainFrame()->LoadURL(*FinalUrl);
+	Browser->GetBrowser()->GetMainFrame()->LoadURL(*FinalUrl);
 
 }
 
 FString UBluEye::GetCurrentURL()
 {
-	return FString(Browser->GetMainFrame()->GetURL().c_str());
+	return FString(Browser->GetBrowser()->GetMainFrame()->GetURL().c_str());
 }
 
 void UBluEye::SetZoom(const float Scale /*= 1*/)
 {
-	Browser->GetHost()->SetZoomLevel(Scale);
+	Browser->GetBrowser()->GetHost()->SetZoomLevel(Scale);
 }
 
 float UBluEye::GetZoom()
 {
-	return Browser->GetHost()->GetZoomLevel();
+	return Browser->GetBrowser()->GetHost()->GetZoomLevel();
 }
 
 void UBluEye::DownloadFile(const FString& FileUrl)
 {
-	Browser->GetHost()->StartDownload(*FileUrl);
+	Browser->GetBrowser()->GetHost()->StartDownload(*FileUrl);
 	//Todo: ensure downloading works in some way, shape or form?
 }
 
 bool UBluEye::IsBrowserLoading()
 {
-	return Browser->IsLoading();
+	return Browser->GetBrowser()->IsLoading();
 }
 
 void UBluEye::ReloadBrowser(bool IgnoreCache)
@@ -289,19 +259,19 @@ void UBluEye::ReloadBrowser(bool IgnoreCache)
 
 	if (IgnoreCache)
 	{
-		return Browser->ReloadIgnoreCache();
+		return Browser->GetBrowser()->ReloadIgnoreCache();
 	}
 
-	Browser->Reload();
+	Browser->GetBrowser()->Reload();
 
 }
 
 void UBluEye::NavBack()
 {
 
-	if (Browser->CanGoBack())
+	if (Browser->GetBrowser()->CanGoBack())
 	{
-		Browser->GoBack();
+		Browser->GetBrowser()->GoBack();
 	}
 
 }
@@ -309,21 +279,21 @@ void UBluEye::NavBack()
 void UBluEye::NavForward()
 {
 
-	if (Browser->CanGoForward())
+	if (Browser->GetBrowser()->CanGoForward())
 	{
-		Browser->GoForward();
+		Browser->GetBrowser()->GoForward();
 	}
 
 }
 
-UTexture2D* UBluEye::ResizeBrowser(const int32 NewWidth, const int32 NewHeight)
+void UBluEye::ResizeBrowser(const int32 NewWidth, const int32 NewHeight)
 {
 
 	if (NewWidth <= 0 || NewHeight <= 0)
 	{
 		// We can't do this, just do nothing.
 		UE_LOG(LogBlu, Log, TEXT("Can't resize when one or both of the sizes are <= 0!"));
-		return Texture;
+		return;
 	}
 
 	// Disable the web view while we resize
@@ -332,32 +302,17 @@ UTexture2D* UBluEye::ResizeBrowser(const int32 NewWidth, const int32 NewHeight)
 	// Set our new Width and Height
 	Settings.ViewSize.X = NewWidth;
 	Settings.ViewSize.Y = NewHeight;
-	
-	// Update our render handler
-	Renderer->Width = NewWidth;
-	Renderer->Height = NewHeight;
-
-	bValidTexture = false;
-
-	Texture = UTexture2D::CreateTransient(Settings.ViewSize.X, Settings.ViewSize.Y, PF_B8G8R8A8);
-	Texture->AddToRoot();
-	Texture->UpdateResource();
-
-	bValidTexture = true;
 
 	// Let the browser's host know we resized it
-	Browser->GetHost()->WasResized();
+	Browser->GetBrowser()->GetHost()->WasResized();
 
 	// Now we can keep going
 	bEnabled = true;
 
 	UE_LOG(LogBlu, Log, TEXT("BluEye was resized!"))
-
-	return Texture;
-
 }
 
-UTexture2D* UBluEye::CropWindow(const int32 Y, const int32 X, const int32 NewWidth, const int32 NewHeight)
+void UBluEye::CropWindow(const int32 Y, const int32 X, const int32 NewWidth, const int32 NewHeight)
 {
 	// Disable the web view while we resize
 	bEnabled = false;
@@ -367,24 +322,10 @@ UTexture2D* UBluEye::CropWindow(const int32 Y, const int32 X, const int32 NewWid
 	Settings.ViewSize.X = NewWidth;
 	Settings.ViewSize.Y = NewHeight;
 
-	// Update our render handler
-	Renderer->Width = NewWidth;
-	Renderer->Height = NewHeight;
-
-	bValidTexture = false;
-
-	Texture = UTexture2D::CreateTransient(Settings.ViewSize.X, Settings.ViewSize.Y, PF_B8G8R8A8);
-	Texture->AddToRoot();
-	Texture->UpdateResource();
-
-	bValidTexture = true;
-
 	// Now we can keep going
 	bEnabled = true;
 
 	UE_LOG(LogBlu, Log, TEXT("BluEye was cropped!"))
-
-	return Texture;
 }
 
 UBluEye* UBluEye::SetProperties(const int32 SetWidth,
@@ -392,9 +333,7 @@ UBluEye* UBluEye::SetProperties(const int32 SetWidth,
 	const bool SetIsTransparent,
 	const bool SetEnabled,
 	const bool SetWebGL,
-	const FString& SetDefaultURL,
-	const FName& SetTextureParameterName,
-	UMaterialInterface* SetBaseMaterial)
+	const FString& SetDefaultURL)
 {
 	Settings.ViewSize.X = SetWidth;
 	Settings.ViewSize.Y = SetHeight;
@@ -403,10 +342,8 @@ UBluEye* UBluEye::SetProperties(const int32 SetWidth,
 
 	Settings.bIsTransparent = SetIsTransparent;
 	Settings.bEnableWebGL = SetWebGL;
-	BaseMaterial = SetBaseMaterial;
 
 	DefaultURL = SetDefaultURL;
-	TextureParameterName = SetTextureParameterName;
 
 	return this;
 }
@@ -417,8 +354,8 @@ void UBluEye::TriggerMouseMove(const FVector2D& Pos, const float Scale)
 	MouseEvent.x = Pos.X / Scale;
 	MouseEvent.y = Pos.Y / Scale;
 
-	Browser->GetHost()->SetFocus(true);
-	Browser->GetHost()->SendMouseMoveEvent(MouseEvent, false);
+	Browser->GetBrowser()->GetHost()->SetFocus(true);
+	Browser->GetBrowser()->GetHost()->SendMouseMoveEvent(MouseEvent, false);
 
 }
 
@@ -439,7 +376,7 @@ void UBluEye::TriggerLeftMouseDown(const FVector2D& Pos, const float Scale)
 	MouseEvent.x = Pos.X / Scale;
 	MouseEvent.y = Pos.Y / Scale;
 
-	Browser->GetHost()->SendMouseClickEvent(MouseEvent, MBT_LEFT, false, 1);
+	Browser->GetBrowser()->GetHost()->SendMouseClickEvent(MouseEvent, MBT_LEFT, false, 1);
 }
 
 void UBluEye::TriggerRightMouseDown(const FVector2D& Pos, const float Scale)
@@ -447,7 +384,7 @@ void UBluEye::TriggerRightMouseDown(const FVector2D& Pos, const float Scale)
 	MouseEvent.x = Pos.X / Scale;
 	MouseEvent.y = Pos.Y / Scale;
 
-	Browser->GetHost()->SendMouseClickEvent(MouseEvent, MBT_RIGHT, false, 1);
+	Browser->GetBrowser()->GetHost()->SendMouseClickEvent(MouseEvent, MBT_RIGHT, false, 1);
 }
 
 void UBluEye::TriggerLeftMouseUp(const FVector2D& Pos, const float Scale)
@@ -455,7 +392,7 @@ void UBluEye::TriggerLeftMouseUp(const FVector2D& Pos, const float Scale)
 	MouseEvent.x = Pos.X / Scale;
 	MouseEvent.y = Pos.Y / Scale;
 
-	Browser->GetHost()->SendMouseClickEvent(MouseEvent, MBT_LEFT, true, 1);
+	Browser->GetBrowser()->GetHost()->SendMouseClickEvent(MouseEvent, MBT_LEFT, true, 1);
 }
 
 void UBluEye::TriggerRightMouseUp(const FVector2D& Pos, const float Scale)
@@ -463,7 +400,7 @@ void UBluEye::TriggerRightMouseUp(const FVector2D& Pos, const float Scale)
 	MouseEvent.x = Pos.X / Scale;
 	MouseEvent.y = Pos.Y / Scale;
 
-	Browser->GetHost()->SendMouseClickEvent(MouseEvent, MBT_RIGHT, true, 1);
+	Browser->GetBrowser()->GetHost()->SendMouseClickEvent(MouseEvent, MBT_RIGHT, true, 1);
 }
 
 void UBluEye::TriggerMouseWheel(const float MouseWheelDelta, const FVector2D& Pos, const float Scale)
@@ -471,7 +408,7 @@ void UBluEye::TriggerMouseWheel(const float MouseWheelDelta, const FVector2D& Po
 	MouseEvent.x = Pos.X / Scale;
 	MouseEvent.y = Pos.Y / Scale;
 
-	Browser->GetHost()->SendMouseWheelEvent(MouseEvent, MouseWheelDelta * 10, MouseWheelDelta * 10);
+	Browser->GetBrowser()->GetHost()->SendMouseWheelEvent(MouseEvent, MouseWheelDelta * 10, MouseWheelDelta * 10);
 }
 
 void UBluEye::KeyDown(FKeyEvent InKey)
@@ -481,7 +418,7 @@ void UBluEye::KeyDown(FKeyEvent InKey)
 	ProcessKeyCode(InKey);
 
 	KeyEvent.type = KEYEVENT_KEYDOWN;
-	Browser->GetHost()->SendKeyEvent(KeyEvent);
+	Browser->GetBrowser()->GetHost()->SendKeyEvent(KeyEvent);
 
 }
 
@@ -492,7 +429,7 @@ void UBluEye::KeyUp(FKeyEvent InKey)
 	ProcessKeyCode(InKey);
 
 	KeyEvent.type = KEYEVENT_KEYUP;
-	Browser->GetHost()->SendKeyEvent(KeyEvent);
+	Browser->GetBrowser()->GetHost()->SendKeyEvent(KeyEvent);
 
 }
 
@@ -526,7 +463,7 @@ void UBluEye::CharKeyInput(FCharacterEvent CharEvent)
     KeyEvent.native_key_code = CharEvent.GetCharacter();
 #endif
 	KeyEvent.type = KEYEVENT_CHAR;
-	Browser->GetHost()->SendKeyEvent(KeyEvent);
+	Browser->GetBrowser()->GetHost()->SendKeyEvent(KeyEvent);
 }
 
 void UBluEye::CharKeyDownUp(FCharacterEvent CharEvent)
@@ -543,10 +480,10 @@ void UBluEye::CharKeyDownUp(FCharacterEvent CharEvent)
 	KeyEvent.native_key_code = CharEvent.GetCharacter();
 #endif
 	KeyEvent.type = KEYEVENT_KEYDOWN;
-	Browser->GetHost()->SendKeyEvent(KeyEvent);
+	Browser->GetBrowser()->GetHost()->SendKeyEvent(KeyEvent);
 
 	KeyEvent.type = KEYEVENT_KEYUP;
-	Browser->GetHost()->SendKeyEvent(KeyEvent);
+	Browser->GetBrowser()->GetHost()->SendKeyEvent(KeyEvent);
 }
 
 void UBluEye::RawCharKeyPress(const FString CharToPress, bool isRepeat,
@@ -586,13 +523,13 @@ void UBluEye::SpecialKeyPress(EBluSpecialKeys Key, bool LeftShiftDown,
 	KeyEvent.windows_key_code = KeyValue;
 	KeyEvent.native_key_code = KeyValue;
 	KeyEvent.type = KEYEVENT_KEYDOWN;
-	Browser->GetHost()->SendKeyEvent(KeyEvent);
+	Browser->GetBrowser()->GetHost()->SendKeyEvent(KeyEvent);
 
 	KeyEvent.windows_key_code = KeyValue;
 	KeyEvent.native_key_code = KeyValue;
 	// bits 30 and 31 should be always 1 for WM_KEYUP
 	KeyEvent.type = KEYEVENT_KEYUP;
-	Browser->GetHost()->SendKeyEvent(KeyEvent);
+	Browser->GetBrowser()->GetHost()->SendKeyEvent(KeyEvent);
 
 }
 
@@ -623,72 +560,9 @@ void UBluEye::ProcessKeyMods(FInputEvent InKey)
 
 }
 
-void UBluEye::SpawnTickEventLoopIfNeeded()
+void UBluEye::StartEventLoop()
 {
-	if (!EventLoopData.DelegateHandle.IsValid())
-	{
-		EventLoopData.DelegateHandle = FTSTicker::GetCoreTicker().AddTicker(FTickerDelegate::CreateLambda([&](float DeltaTime)
-		{
-			if (EventLoopData.bShouldTickEventLoop)
-			{
-				if (Settings.bDebugLogTick)
-				{
-					UE_LOG(LogTemp, Log, TEXT("Delta: %1.2f"), DeltaTime);
-				}
-				BluManager::DoBluMessageLoop();
-			}
-			
-			return true;
-		}));
-	}
-
-	EventLoopData.EyeCount++;
-}
-
-UTexture2D* UBluEye::GetTexture() const
-{
-	if (!Texture)
-	{
-		return UTexture2D::CreateTransient(Settings.ViewSize.X, Settings.ViewSize.Y, PF_B8G8R8A8);
-	}
-
-	return Texture;
-}
-
-void UBluEye::ResetMatInstance()
-{
-	if (!Texture || !BaseMaterial || TextureParameterName.IsNone())
-	{
-		return;
-	}
-
-	// Create material instance
-	if (!MaterialInstance)
-	{
-		MaterialInstance = UMaterialInstanceDynamic::Create(BaseMaterial, NULL);
-		if (!MaterialInstance)
-		{
-			UE_LOG(LogBlu, Warning, TEXT("UI Material instance can't be created"));
-			return;
-		}
-	}
-
-	// Check again, we must have material instance
-	if (!MaterialInstance)
-	{
-		UE_LOG(LogBlu, Error, TEXT("UI Material instance wasn't created"));
-		return;
-	}
-
-	// Check we have desired parameter
-	UTexture* Tex = nullptr;
-	if (!MaterialInstance->GetTextureParameterValue(TextureParameterName, Tex))
-	{
-		UE_LOG(LogBlu, Warning, TEXT("UI Material instance Texture parameter not found"));
-		return;
-	}
-
-	MaterialInstance->SetTextureParameterValue(TextureParameterName, Texture);
+	CefRunMessageLoop();
 }
 
 void UBluEye::CloseBrowser()
@@ -701,31 +575,17 @@ void UBluEye::BeginDestroy()
 	if (Browser)
 	{
 		// Close up the browser
-		Browser->GetHost()->SetAudioMuted(true);
-		Browser->GetMainFrame()->LoadURL("about:blank");
+		Browser->GetBrowser()->GetHost()->SetAudioMuted(true);
+		Browser->GetBrowser()->GetMainFrame()->LoadURL("about:blank");
 		//browser->GetMainFrame()->Delete();
-		Browser->GetHost()->CloseDevTools();
-		Browser->GetHost()->CloseBrowser(true);
+		Browser->GetBrowser()->GetHost()->CloseDevTools();
+		Browser->GetBrowser()->GetHost()->CloseBrowser(true);
 		Browser = nullptr;
 
 
 		UE_LOG(LogBlu, Warning, TEXT("Browser Closing"));
 	}
 
-	DestroyTexture();
 	SetFlags(RF_BeginDestroyed);
-
-	//Remove our auto-ticking setup
-	EventLoopData.EyeCount--;
-	if (EventLoopData.EyeCount <= 0)
-	{
-		FTSTicker::GetCoreTicker().RemoveTicker(EventLoopData.DelegateHandle);
-		EventLoopData.DelegateHandle = FTSTicker::FDelegateHandle();
-	}
 	Super::BeginDestroy();
-}
-
-void UBluEye::SetShouldTickEventLoop(bool ShouldTick /*= true*/)
-{
-	EventLoopData.bShouldTickEventLoop = ShouldTick;
 }

@@ -4,6 +4,14 @@ BluManager::BluManager()
 {
 }
 
+void BluManager::OnBeforeChildProcessLaunch(CefRefPtr<CefCommandLine> command_line)
+{
+	// pass non-cef-specific args here
+	// command_line->AppendSwitch("use-views");
+	// command_line->AppendSwitch("hide-frame");
+	// command_line->AppendSwitch("hide-controls");
+}
+
 void BluManager::OnBeforeCommandLineProcessing(const CefString& process_type,
 	CefRefPtr< CefCommandLine > CommandLine)
 {
@@ -17,10 +25,13 @@ void BluManager::OnBeforeCommandLineProcessing(const CefString& process_type,
 	BluManager::CPURenderSettings = false;
 	/////////////////
 
-	CommandLine->AppendSwitch("off-screen-rendering-enabled");
-	CommandLine->AppendSwitchWithValue("off-screen-frame-rate", "60");
+	//CommandLine->AppendSwitch("off-screen-rendering-enabled");
+	//CommandLine->AppendSwitchWithValue("off-screen-frame-rate", "60");
 	CommandLine->AppendSwitch("enable-font-antialiasing");
 	CommandLine->AppendSwitch("enable-media-stream");
+	// CommandLine->AppendSwitch("use-views");
+	// CommandLine->AppendSwitch("hide-frame");
+	// CommandLine->AppendSwitch("hide-controls");
 
 	// Should we use the render settings that use less CPU?
 	if (CPURenderSettings)

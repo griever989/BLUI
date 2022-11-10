@@ -39,27 +39,13 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Blu")
 	FBluEyeSettings Settings;
 
-	/** Material that will be instanced to load UI texture into it */
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Blu")
-	UMaterialInterface* BaseMaterial;
-
-	/** Name of parameter to load UI texture into material */
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Blu")
-	FName TextureParameterName = "BluTexture";
-
 	UFUNCTION(BlueprintCallable, Category = "Blu")
 	UBluEye* SetProperties(const int32 SetWidth,
 							const int32 SetHeight,
 							const bool SetIsTransparent,
 							const bool SetEnabled,
 							const bool SetWebGL,
-							const FString& SetDefaultURL,
-							const FName& SetTextureParameterName,
-							UMaterialInterface* SetBaseMaterial);
-
-	/** Get the texture data from our UI component */
-	UFUNCTION(BlueprintCallable, Category = "Blu")
-	UTexture2D* GetTexture() const;
+							const FString& SetDefaultURL);
 
 	/** Execute JS code inside the browser */
 	UFUNCTION(BlueprintCallable, Category = "Blu")
@@ -201,34 +187,23 @@ public:
 
 	/** Resize the browser's viewport */
 	UFUNCTION(BlueprintCallable, Category = "Blu")
-	UTexture2D* ResizeBrowser(const int32 NewWidth, const int32 NewHeight);
+	void ResizeBrowser(const int32 NewWidth, const int32 NewHeight);
 
 	//This cropping function doesn't work atm
 	//UFUNCTION(BlueprintCallable, Category = "Blu")
-	UTexture2D* CropWindow(const int32 Y, const int32 X, const int32 NewWidth, const int32 NewHeight);
-
-	void TextureUpdate(const void* buffer, FUpdateTextureRegion2D * updateRegions, uint32  regionCount);
+	void CropWindow(const int32 Y, const int32 X, const int32 NewWidth, const int32 NewHeight);
 
 	void BeginDestroy() override;
-
-	/** Use this to pause the tick loop in the new system */
-	UFUNCTION(BlueprintCallable, Category = "Blu")
-	static void SetShouldTickEventLoop(bool ShouldTick = true);
 
 protected:
 
 	CefWindowInfo Info;
 	CefRefPtr<BrowserClient> ClientHandler;
 	CefBrowserSettings BrowserSettings;
-	RenderHandler* Renderer;
-	CefRefPtr<CefBrowser> Browser;
+	CefRefPtr<CefBrowserView> Browser;
 	
 	CefMouseEvent MouseEvent;
 	CefKeyEvent KeyEvent;
-
-	void ResetTexture();
-	void DestroyTexture();
-	void ResetMatInstance();
 		
 	// Parse UE4 key events, helper
 	void ProcessKeyCode(FKeyEvent InKey);
@@ -236,18 +211,9 @@ protected:
 	// Helper for processing key modifiers
 	void ProcessKeyMods(FInputEvent InKey);
 
-	void SpawnTickEventLoopIfNeeded();
-
-	static FTickEventLoopData EventLoopData;
-
-	// Store UI state in this UTexture2D
-	UPROPERTY()
-	UTexture2D* Texture;
-
-	UMaterialInstanceDynamic* MaterialInstance;
+	void StartEventLoop();
 
 private:
 
 	FBluTextureParams RenderParams;
-	FThreadSafeBool bValidTexture;
 };

@@ -2,37 +2,6 @@
 #include "Interfaces/IPluginManager.h"
 #include "BluEye.h"
 
-RenderHandler::RenderHandler(int32 Width, int32 Height, UBluEye* UI)
-{
-	this->Width = Width;
-	this->Height = Height;
-	this->ParentUI = UI;
-}
-
-void RenderHandler::GetViewRect(CefRefPtr<CefBrowser> Browser, CefRect &Rect)
-{
-	Rect = CefRect(0, 0, Width, Height);
-}
-
-void RenderHandler::OnPaint(CefRefPtr<CefBrowser> Browser, PaintElementType Type, const RectList &DirtyRects, const void *Buffer, int InWidth, int InHeight)
-{
-	FUpdateTextureRegion2D *UpdateRegions = static_cast<FUpdateTextureRegion2D*>(FMemory::Malloc(sizeof(FUpdateTextureRegion2D) * DirtyRects.size()));
-
-	int Current = 0;
-	for (auto DirtyRect : DirtyRects)
-	{
-		UpdateRegions[Current].DestX = UpdateRegions[Current].SrcX = DirtyRect.x;
-		UpdateRegions[Current].DestY = UpdateRegions[Current].SrcY = DirtyRect.y;
-		UpdateRegions[Current].Height = DirtyRect.height;
-		UpdateRegions[Current].Width = DirtyRect.width;
-
-		Current++;
-	}
-
-	// Trigger our parent UIs Texture to update
-	ParentUI->TextureUpdate(Buffer, UpdateRegions, DirtyRects.size());
-}
-
 void BrowserClient::OnAfterCreated(CefRefPtr<CefBrowser> Browser)
 {
 	//CEF_REQUIRE_UI_THREAD();
@@ -157,11 +126,8 @@ void BrowserClient::OnDownloadUpdated(
 	
 	UE_LOG(LogClass, Log, TEXT("Download %s Updated: %d"), *Url , Percentage);
 
-	RenderHandlerRef->ParentUI->DownloadUpdated.Broadcast(Url, Percentage);
-
 	if (Percentage == 100 && DownloadItem->IsComplete()) {
 		UE_LOG(LogClass, Log, TEXT("Download %s Complete"), *Url);
-		RenderHandlerRef->ParentUI->DownloadComplete.Broadcast(Url);
 	}
 
 	//Example download cancel/pause etc, we just have to hijack this

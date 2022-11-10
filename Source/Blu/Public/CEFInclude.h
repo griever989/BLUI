@@ -10,6 +10,8 @@
 THIRD_PARTY_INCLUDES_START
 #include "include/cef_client.h"
 #include "include/cef_browser.h"
+#include "include/views/cef_window.h"
+#include "include/views/cef_browser_view.h"
 #include "include/cef_app.h"
 THIRD_PARTY_INCLUDES_END
 //#pragma pop_macro("OVERRIDE")

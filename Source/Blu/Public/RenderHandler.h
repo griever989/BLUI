@@ -5,36 +5,12 @@
 
 class UBluEye;
 
-
-class RenderHandler : public CefRenderHandler
-{
-	public:
-		UBluEye* ParentUI;
-
-		int32 Width;
-		int32 Height;
-
-		// CefRenderHandler interface
-		virtual void GetViewRect(CefRefPtr<CefBrowser> Browser, CefRect &Rect) override;
-
-		void OnPaint(CefRefPtr<CefBrowser> Browser, PaintElementType Type, const RectList &DirtyRects, const void *Buffer, int Width, int Height) override;
-
-		RenderHandler(int32 Width, int32 Height, UBluEye* UI);
-
-		// CefBase interface
-		// NOTE: Must be at bottom
-	public:
-		IMPLEMENT_REFCOUNTING(RenderHandler);
-};
-
-// for manual render handler
 class BrowserClient : public CefClient, public CefLifeSpanHandler, public CefDownloadHandler, public CefDisplayHandler
 {
 
 	private:
 		FScriptEvent* EventEmitter;
 		FLogEvent* LogEmitter;
-		CefRefPtr<RenderHandler> RenderHandlerRef;
 
 		// For lifespan
 		CefRefPtr<CefBrowser> BrowserRef;
@@ -42,20 +18,9 @@ class BrowserClient : public CefClient, public CefLifeSpanHandler, public CefDow
 		bool bIsClosing;
 
 	public:
-		BrowserClient(RenderHandler* InRenderHandler) : RenderHandlerRef(InRenderHandler)
+		BrowserClient()
 		{
 		
-		};
-
-		virtual CefRefPtr<CefRenderHandler> GetRenderHandler() 
-		{
-			return RenderHandlerRef;
-		};
-
-		// Getter for renderer
-		virtual CefRefPtr<RenderHandler> GetRenderHandlerCustom()
-		{
-			return RenderHandlerRef;
 		};
 
 		// Getter for lifespan
