@@ -55,6 +55,10 @@ namespace {
 			return CefSize(800, 600);
 		}
 
+		bool IsFrameless(CefRefPtr<CefWindow> window) override {
+			return true;
+		}
+
 	private:
 		CefRefPtr<CefBrowserView> browser_view_;
 
