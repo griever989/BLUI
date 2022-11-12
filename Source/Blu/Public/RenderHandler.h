@@ -11,6 +11,7 @@ class BrowserClient : public CefClient, public CefLifeSpanHandler, public CefDow
 	private:
 		FScriptEvent* EventEmitter;
 		FLogEvent* LogEmitter;
+		FString DefaultURL;
 
 		// For lifespan
 		CefRefPtr<CefBrowser> BrowserRef;
@@ -18,10 +19,12 @@ class BrowserClient : public CefClient, public CefLifeSpanHandler, public CefDow
 		bool bIsClosing;
 
 	public:
-		BrowserClient()
+		BrowserClient(const FString& defaultUrl)
 		{
-		
+			DefaultURL = defaultUrl;
 		};
+
+		void LoadURL(const FString& newURL);
 
 		// Getter for lifespan
 		virtual CefRefPtr<CefLifeSpanHandler> GetLifeSpanHandler() override

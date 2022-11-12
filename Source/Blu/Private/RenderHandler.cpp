@@ -11,6 +11,11 @@ void BrowserClient::OnAfterCreated(CefRefPtr<CefBrowser> Browser)
 		BrowserRef = Browser;
 		BrowserId = Browser->GetIdentifier();
 	}
+
+	UE_LOG(LogBlu, Log, TEXT("Component Initialized"));
+	UE_LOG(LogBlu, Log, TEXT("Loading URL: %s"), *DefaultURL);
+
+	LoadURL(DefaultURL);
 }
 
 void BrowserClient::OnBeforeClose(CefRefPtr<CefBrowser> Browser)
@@ -97,6 +102,43 @@ void BrowserClient::SetEventEmitter(FScriptEvent* Emitter)
 void BrowserClient::SetLogEmitter(FLogEvent* Emitter)
 {
 	this->LogEmitter = Emitter;
+}
+
+void BrowserClient::LoadURL(const FString& newURL)
+{
+	FString FinalUrl = newURL;
+
+	//Detect chrome-devtools, and re-target them to regular devtools
+	if (newURL.Contains(TEXT("chrome-devtools://devtools")))
+	{
+		//devtools://devtools/inspector.html?v8only=true&ws=localhost:9229
+		//browser->GetHost()->ShowDevTools(info, g_handler, browserSettings, CefPoint());
+		FinalUrl = FinalUrl.Replace(TEXT("chrome-devtools://devtools/bundled/inspector.html"), TEXT("devtools://devtools/inspector.html"));
+	}
+
+	// Check if we want to load a local file
+	if (newURL.Contains(TEXT("blui://"), ESearchCase::IgnoreCase, ESearchDir::FromStart))
+	{
+		// Get the current working directory
+		FString GameDir = FPaths::ConvertRelativePathToFull(FPaths::ProjectDir());
+
+		// We're loading a local file, so replace the proto with our game directory path
+		FString LocalFile = newURL.Replace(TEXT("blui://"), *GameDir, ESearchCase::IgnoreCase);
+
+		// Now we use the file proto
+		LocalFile = FString(TEXT("file:///")) + LocalFile;
+
+		UE_LOG(LogBlu, Log, TEXT("Load Local File: %s"), *LocalFile)
+
+		// Load it up 
+		BrowserRef->GetMainFrame()->LoadURL(*LocalFile);
+
+		return;
+
+	}
+
+	// Load as usual
+	BrowserRef->GetMainFrame()->LoadURL(*FinalUrl);
 }
 
 void BrowserClient::OnBeforeDownload(

@@ -71,6 +71,10 @@ namespace {
 	public:
 		SimpleBrowserViewDelegate() {}
 
+		void SetBrowser(CefRefPtr<CefBrowserView> view) {
+			browserView = view;
+		}
+
 		bool OnPopupBrowserViewCreated(CefRefPtr<CefBrowserView> browser_view,
 			CefRefPtr<CefBrowserView> popup_browser_view,
 			bool is_devtools) override {
@@ -87,9 +91,19 @@ namespace {
 			return true;
 		}
 
+		void OnWindowCreated(CefRefPtr<CefWindow> window) override {
+			CefRect bounds;
+			bounds.width = 800;
+			bounds.height = 600;
+			window->SetBounds(bounds);
+			window->Show();
+			window->AddChildView(browserView);
+		}
+
 	private:
 		IMPLEMENT_REFCOUNTING(SimpleBrowserViewDelegate);
 		DISALLOW_COPY_AND_ASSIGN(SimpleBrowserViewDelegate);
+		CefRefPtr<CefBrowserView> browserView;
 	};
 
 }
@@ -141,15 +155,18 @@ void UBluEye::Init()
 
 	//NB: this setting will change it globally for all new instances
 	BluManager::AutoPlay = Settings.bAutoPlayEnabled;
-	ClientHandler = new BrowserClient();
+	ClientHandler = new BrowserClient(DefaultURL);
 
+	CefRefPtr<SimpleBrowserViewDelegate> viewWindow = new SimpleBrowserViewDelegate();
 	Browser = CefBrowserView::CreateBrowserView(
 		ClientHandler.get(),
 		"about:blank",
 		BrowserSettings,
 		nullptr,
 		nullptr,
-		new SimpleBrowserViewDelegate());
+		viewWindow);
+	viewWindow->SetBrowser(Browser);
+	CefWindow::CreateTopLevelWindow(viewWindow);
 
 	//Browser->GetHost()->SetWindowlessFrameRate(Settings.FrameRate);
 	//Browser->GetBrowser()->GetHost()->SetAudioMuted(Settings.bAudioMuted);
@@ -157,11 +174,6 @@ void UBluEye::Init()
 	// Setup JS event emitter
 	ClientHandler->SetEventEmitter(&ScriptEventEmitter);
 	ClientHandler->SetLogEmitter(&LogEventEmitter);
-
-	UE_LOG(LogBlu, Log, TEXT("Component Initialized"));
-	UE_LOG(LogBlu, Log, TEXT("Loading URL: %s"), *DefaultURL);
-
-	LoadURL(DefaultURL);
 
 	StartEventLoop();
 }
@@ -195,41 +207,11 @@ void UBluEye::ExecuteJSMethodWithParams(const FString& methodName, const TArray<
 
 void UBluEye::LoadURL(const FString& newURL)
 {
-	FString FinalUrl = newURL;
-
-	//Detect chrome-devtools, and re-target them to regular devtools
-	if (newURL.Contains(TEXT("chrome-devtools://devtools")))
+	auto handler = ClientHandler;
+	if (handler)
 	{
-		//devtools://devtools/inspector.html?v8only=true&ws=localhost:9229
-		//browser->GetHost()->ShowDevTools(info, g_handler, browserSettings, CefPoint());
-		FinalUrl = FinalUrl.Replace(TEXT("chrome-devtools://devtools/bundled/inspector.html"), TEXT("devtools://devtools/inspector.html"));
+		handler->LoadURL(newURL);
 	}
-
-	// Check if we want to load a local file
-	if (newURL.Contains(TEXT("blui://"), ESearchCase::IgnoreCase, ESearchDir::FromStart))
-	{
-
-		// Get the current working directory
-		FString GameDir = FPaths::ConvertRelativePathToFull(FPaths::ProjectDir());
-
-		// We're loading a local file, so replace the proto with our game directory path
-		FString LocalFile = newURL.Replace(TEXT("blui://"), *GameDir, ESearchCase::IgnoreCase);
-
-		// Now we use the file proto
-		LocalFile = FString(TEXT("file:///")) + LocalFile;
-
-		UE_LOG(LogBlu, Log, TEXT("Load Local File: %s"), *LocalFile)
-
-		// Load it up 
-		Browser->GetBrowser()->GetMainFrame()->LoadURL(*LocalFile);
-
-		return;
-
-	}
-
-	// Load as usual
-	Browser->GetBrowser()->GetMainFrame()->LoadURL(*FinalUrl);
-
 }
 
 FString UBluEye::GetCurrentURL()
